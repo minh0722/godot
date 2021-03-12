@@ -412,25 +412,16 @@ void TextEdit::_update_selection_mode_word() {
 	_get_mouse_pos(Point2i(mp.x, mp.y), row, col);
 
 	String line = text[row];
-	int beg = CLAMP(col, 0, line.length());
-	// If its the first selection and on whitespace make sure we grab the word instead.
-	if (!selection.active) {
-		while (beg > 0 && line[beg] <= 32) {
-			beg--;
-		}
-	}
+	int cursor_pos = CLAMP(col, 0, line.length());
+	int beg = cursor_pos;
 	int end = beg;
-	bool symbol = beg < line.length() && _is_symbol(line[beg]);
-
-	// Get the word end and begin points.
-	while (beg > 0 && line[beg - 1] > 32 && (symbol == _is_symbol(line[beg - 1]))) {
-		beg--;
-	}
-	while (end < line.length() && line[end + 1] > 32 && (symbol == _is_symbol(line[end + 1]))) {
-		end++;
-	}
-	if (end < line.length()) {
-		end += 1;
+	Vector<Vector2i> words = TS->shaped_text_get_word_breaks(text.get_line_data(row)->get_rid());
+	for (int i = 0; i < words.size(); i++) {
+		if (words[i].x < cursor_pos && words[i].y > cursor_pos) {
+			beg = words[i].x;
+			end = words[i].y;
+			break;
+		}
 	}
 
 	// Initial selection.
@@ -1711,7 +1702,7 @@ void TextEdit::_notification(int p_what) {
 			}
 
 			if (has_focus()) {
-				if (get_viewport()->get_window_id() != DisplayServer::INVALID_WINDOW_ID) {
+				if (get_viewport()->get_window_id() != DisplayServer::INVALID_WINDOW_ID && DisplayServer::get_singleton()->has_feature(DisplayServer::FEATURE_IME)) {
 					DisplayServer::get_singleton()->window_set_ime_active(true, get_viewport()->get_window_id());
 					DisplayServer::get_singleton()->window_set_ime_position(get_global_position() + cursor_pos, get_viewport()->get_window_id());
 				}
@@ -1724,7 +1715,7 @@ void TextEdit::_notification(int p_what) {
 				draw_caret = true;
 			}
 
-			if (get_viewport()->get_window_id() != DisplayServer::INVALID_WINDOW_ID) {
+			if (get_viewport()->get_window_id() != DisplayServer::INVALID_WINDOW_ID && DisplayServer::get_singleton()->has_feature(DisplayServer::FEATURE_IME)) {
 				DisplayServer::get_singleton()->window_set_ime_active(true, get_viewport()->get_window_id());
 				DisplayServer::get_singleton()->window_set_ime_position(get_global_position() + _get_cursor_pixel_pos(false), get_viewport()->get_window_id());
 			}
@@ -1753,7 +1744,7 @@ void TextEdit::_notification(int p_what) {
 				caret_blink_timer->stop();
 			}
 
-			if (get_viewport()->get_window_id() != DisplayServer::INVALID_WINDOW_ID) {
+			if (get_viewport()->get_window_id() != DisplayServer::INVALID_WINDOW_ID && DisplayServer::get_singleton()->has_feature(DisplayServer::FEATURE_IME)) {
 				DisplayServer::get_singleton()->window_set_ime_position(Point2(), get_viewport()->get_window_id());
 				DisplayServer::get_singleton()->window_set_ime_active(false, get_viewport()->get_window_id());
 			}
@@ -2199,9 +2190,14 @@ void TextEdit::_new_line(bool p_split_current_line, bool p_above) {
 
 				// No need to move the brace below if we are not taking the text with us.
 				char32_t closing_char = _get_right_pair_symbol(indent_char);
-				if ((closing_char != 0) && (closing_char == text[cursor.line][cursor.column]) && !p_split_current_line) {
-					brace_indent = true;
-					ins += "\n" + ins.substr(1, ins.length() - 2);
+				if ((closing_char != 0) && (closing_char == text[cursor.line][cursor.column])) {
+					if (p_split_current_line) {
+						brace_indent = true;
+						ins += "\n" + ins.substr(1, ins.length() - 2);
+					} else {
+						brace_indent = false;
+						ins = "\n" + ins.substr(1, ins.length() - 2);
+					}
 				}
 			}
 		}
@@ -2993,8 +2989,6 @@ void TextEdit::_gui_input(const Ref<InputEvent> &p_gui_input) {
 					} else {
 						if (cursor.line < selection.selecting_line || (cursor.line == selection.selecting_line && cursor.column < selection.selecting_column)) {
 							if (selection.shiftclick_left) {
-								SWAP(selection.from_column, selection.to_column);
-								SWAP(selection.from_line, selection.to_line);
 								selection.shiftclick_left = !selection.shiftclick_left;
 							}
 							selection.from_column = cursor.column;

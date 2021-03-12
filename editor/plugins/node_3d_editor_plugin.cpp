@@ -535,7 +535,10 @@ ObjectID Node3DEditorViewport::_select_ray(const Point2 &p_pos, bool p_append, b
 		}
 
 		if (dist < closest_dist) {
-			item = edited_scene->get_deepest_editable_node(Object::cast_to<Node>(spat));
+			item = Object::cast_to<Node>(spat);
+			if (item != edited_scene) {
+				item = edited_scene->get_deepest_editable_node(item);
+			}
 
 			closest = item->get_instance_id();
 			closest_dist = dist;
@@ -694,7 +697,10 @@ void Node3DEditorViewport::_select_region() {
 			continue;
 		}
 
-		Node *item = edited_scene->get_deepest_editable_node(Object::cast_to<Node>(sp));
+		Node *item = Object::cast_to<Node>(sp);
+		if (item != edited_scene) {
+			item = edited_scene->get_deepest_editable_node(item);
+		}
 
 		// Replace the node by the group if grouped
 		if (item->is_class("Node3D")) {
@@ -4707,7 +4713,7 @@ Dictionary Node3DEditor::get_state() const {
 			continue;
 		}
 		int state = gizmos_menu->get_item_state(gizmos_menu->get_item_index(i));
-		String name = gizmo_plugins_by_name[i]->get_name();
+		String name = gizmo_plugins_by_name[i]->get_gizmo_name();
 		gizmos_status[name] = state;
 	}
 
@@ -4833,7 +4839,7 @@ void Node3DEditor::set_state(const Dictionary &p_state) {
 			}
 			int state = EditorNode3DGizmoPlugin::VISIBLE;
 			for (int i = 0; i < keys.size(); i++) {
-				if (gizmo_plugins_by_name.write[j]->get_name() == String(keys[i])) {
+				if (gizmo_plugins_by_name.write[j]->get_gizmo_name() == String(keys[i])) {
 					state = gizmos_status[keys[i]];
 					break;
 				}
@@ -5744,7 +5750,7 @@ void Node3DEditor::_update_gizmos_menu() {
 		if (!gizmo_plugins_by_name[i]->can_be_hidden()) {
 			continue;
 		}
-		String plugin_name = gizmo_plugins_by_name[i]->get_name();
+		String plugin_name = gizmo_plugins_by_name[i]->get_gizmo_name();
 		const int plugin_state = gizmo_plugins_by_name[i]->get_state();
 		gizmos_menu->add_multistate_item(plugin_name, 3, plugin_state, i);
 		const int idx = gizmos_menu->get_item_index(i);
@@ -6243,12 +6249,14 @@ void Node3DEditor::_notification(int p_what) {
 
 		sun_button->set_icon(get_theme_icon("DirectionalLight3D", "EditorIcons"));
 		environ_button->set_icon(get_theme_icon("WorldEnvironment", "EditorIcons"));
-		sun_environ_settings->set_icon(get_theme_icon("GuiTabMenu", "EditorIcons"));
+		sun_environ_settings->set_icon(get_theme_icon("GuiTabMenuHl", "EditorIcons"));
 
 		_update_preview_environment();
 		sun_title->add_theme_font_override("font", get_theme_font("title_font", "Window"));
 		environ_title->add_theme_font_override("font", get_theme_font("title_font", "Window"));
 
+		sun_state->set_custom_minimum_size(sun_vb->get_combined_minimum_size());
+		environ_state->set_custom_minimum_size(environ_vb->get_combined_minimum_size());
 	} else if (p_what == NOTIFICATION_ENTER_TREE) {
 		_register_all_gizmos();
 		_update_gizmos_menu();
@@ -6450,6 +6458,7 @@ void Node3DEditor::_register_all_gizmos() {
 	add_gizmo_plugin(Ref<GIProbeGizmoPlugin>(memnew(GIProbeGizmoPlugin)));
 	add_gizmo_plugin(Ref<BakedLightmapGizmoPlugin>(memnew(BakedLightmapGizmoPlugin)));
 	add_gizmo_plugin(Ref<LightmapProbeGizmoPlugin>(memnew(LightmapProbeGizmoPlugin)));
+	add_gizmo_plugin(Ref<CollisionObject3DGizmoPlugin>(memnew(CollisionObject3DGizmoPlugin)));
 	add_gizmo_plugin(Ref<CollisionShape3DGizmoPlugin>(memnew(CollisionShape3DGizmoPlugin)));
 	add_gizmo_plugin(Ref<CollisionPolygon3DGizmoPlugin>(memnew(CollisionPolygon3DGizmoPlugin)));
 	add_gizmo_plugin(Ref<NavigationRegion3DGizmoPlugin>(memnew(NavigationRegion3DGizmoPlugin)));
@@ -6563,9 +6572,9 @@ void Node3DEditor::_update_preview_environment() {
 		}
 
 		if (directional_light_count > 0) {
-			sun_state->set_text(TTR("Scene contains\nDirectionalLight3D.\nPreview Disabled."));
+			sun_state->set_text(TTR("Scene contains\nDirectionalLight3D.\nPreview disabled."));
 		} else {
-			sun_state->set_text(TTR("Preview Disabled."));
+			sun_state->set_text(TTR("Preview disabled."));
 		}
 
 	} else {
@@ -6587,9 +6596,9 @@ void Node3DEditor::_update_preview_environment() {
 			environ_vb->hide();
 		}
 		if (world_env_count > 0) {
-			environ_state->set_text(TTR("Scene contains\nWorldEnvironment.\nPreview Disabled."));
+			environ_state->set_text(TTR("Scene contains\nWorldEnvironment.\nPreview disabled."));
 		} else {
-			environ_state->set_text(TTR("Preview Disabled."));
+			environ_state->set_text(TTR("Preview disabled."));
 		}
 
 	} else {
@@ -7027,10 +7036,6 @@ Node3DEditor::Node3DEditor(EditorNode *p_editor) {
 		sun_title->set_text(TTR("Preview Sun"));
 		sun_title->set_align(Label::ALIGN_CENTER);
 
-		sun_state = memnew(Label);
-		sun_environ_hb->add_child(sun_state);
-		sun_state->show();
-
 		CenterContainer *sun_direction_center = memnew(CenterContainer);
 		sun_direction = memnew(Control);
 		sun_direction->set_custom_minimum_size(Size2i(128, 128) * EDSCALE);
@@ -7071,6 +7076,12 @@ Node3DEditor::Node3DEditor(EditorNode *p_editor) {
 		sun_vb->add_spacer();
 		sun_vb->add_child(sun_add_to_scene);
 
+		sun_state = memnew(Label);
+		sun_environ_hb->add_child(sun_state);
+		sun_state->set_align(Label::ALIGN_CENTER);
+		sun_state->set_valign(Label::VALIGN_CENTER);
+		sun_state->set_h_size_flags(SIZE_EXPAND_FILL);
+
 		VSeparator *sc = memnew(VSeparator);
 		sc->set_custom_minimum_size(Size2(50 * EDSCALE, 0));
 		sc->set_v_size_flags(SIZE_EXPAND_FILL);
@@ -7078,13 +7089,8 @@ Node3DEditor::Node3DEditor(EditorNode *p_editor) {
 
 		environ_vb = memnew(VBoxContainer);
 		sun_environ_hb->add_child(environ_vb);
-		environ_vb->hide();
-
 		environ_vb->set_custom_minimum_size(Size2(200 * EDSCALE, 0));
-
-		environ_state = memnew(Label);
-		sun_environ_hb->add_child(environ_state);
-		environ_state->show();
+		environ_vb->hide();
 
 		environ_title = memnew(Label);
 		environ_vb->add_child(environ_title);
@@ -7133,6 +7139,12 @@ Node3DEditor::Node3DEditor(EditorNode *p_editor) {
 		environ_add_to_scene->connect("pressed", callable_mp(this, &Node3DEditor::_add_environment_to_scene));
 		environ_vb->add_spacer();
 		environ_vb->add_child(environ_add_to_scene);
+
+		environ_state = memnew(Label);
+		sun_environ_hb->add_child(environ_state);
+		environ_state->set_align(Label::ALIGN_CENTER);
+		environ_state->set_valign(Label::VALIGN_CENTER);
+		environ_state->set_h_size_flags(SIZE_EXPAND_FILL);
 
 		preview_sun = memnew(DirectionalLight3D);
 		preview_sun->set_shadow(true);
@@ -7240,7 +7252,7 @@ void Node3DEditorPlugin::snap_cursor_to_plane(const Plane &p_plane) {
 struct _GizmoPluginPriorityComparator {
 	bool operator()(const Ref<EditorNode3DGizmoPlugin> &p_a, const Ref<EditorNode3DGizmoPlugin> &p_b) const {
 		if (p_a->get_priority() == p_b->get_priority()) {
-			return p_a->get_name() < p_b->get_name();
+			return p_a->get_gizmo_name() < p_b->get_gizmo_name();
 		}
 		return p_a->get_priority() > p_b->get_priority();
 	}
@@ -7248,7 +7260,7 @@ struct _GizmoPluginPriorityComparator {
 
 struct _GizmoPluginNameComparator {
 	bool operator()(const Ref<EditorNode3DGizmoPlugin> &p_a, const Ref<EditorNode3DGizmoPlugin> &p_b) const {
-		return p_a->get_name() < p_b->get_name();
+		return p_a->get_gizmo_name() < p_b->get_gizmo_name();
 	}
 };
 
@@ -7459,7 +7471,7 @@ void EditorNode3DGizmoPlugin::_bind_methods() {
 
 	ClassDB::bind_method(D_METHOD("get_material", "name", "gizmo"), &EditorNode3DGizmoPlugin::get_material, DEFVAL(Ref<EditorNode3DGizmo>()));
 
-	BIND_VMETHOD(MethodInfo(Variant::STRING, "get_name"));
+	BIND_VMETHOD(MethodInfo(Variant::STRING, "get_gizmo_name"));
 	BIND_VMETHOD(MethodInfo(Variant::INT, "get_priority"));
 	BIND_VMETHOD(MethodInfo(Variant::BOOL, "can_be_hidden"));
 	BIND_VMETHOD(MethodInfo(Variant::BOOL, "is_selectable_when_hidden"));

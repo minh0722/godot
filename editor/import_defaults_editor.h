@@ -1,5 +1,5 @@
 /*************************************************************************/
-/*  script_class_parser.h                                                */
+/*  import_defaults_editor.h                                             */
 /*************************************************************************/
 /*                       This file is part of:                           */
 /*                           GODOT ENGINE                                */
@@ -28,81 +28,48 @@
 /* SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.                */
 /*************************************************************************/
 
-#ifndef SCRIPT_CLASS_PARSER_H
-#define SCRIPT_CLASS_PARSER_H
+#ifndef IMPORT_DEFAULTS_EDITOR_H
+#define IMPORT_DEFAULTS_EDITOR_H
 
-#include "core/string/ustring.h"
-#include "core/templates/vector.h"
-#include "core/variant/variant.h"
+#include "core/object/undo_redo.h"
+#include "editor/action_map_editor.h"
+#include "editor/editor_data.h"
+#include "editor/editor_plugin_settings.h"
+#include "editor/editor_sectioned_inspector.h"
+#include "editor/localization_editor.h"
+#include "editor/shader_globals_editor.h"
+#include "editor_autoload_settings.h"
+#include "scene/gui/center_container.h"
+#include "scene/gui/option_button.h"
 
-class ScriptClassParser {
-public:
-	struct NameDecl {
-		enum Type {
-			NAMESPACE_DECL,
-			CLASS_DECL,
-			STRUCT_DECL
-		};
+class ImportDefaultsEditorSettings;
 
-		String name;
-		Type type = NAMESPACE_DECL;
-	};
+class ImportDefaultsEditor : public VBoxContainer {
+	GDCLASS(ImportDefaultsEditor, VBoxContainer)
 
-	struct ClassDecl {
-		String name;
-		String namespace_;
-		Vector<String> base;
-		bool nested = false;
-	};
+	OptionButton *importers;
+	Button *save_defaults;
+	Button *reset_defaults;
 
-private:
-	String code;
-	int idx = 0;
-	int line = 0;
-	String error_str;
-	bool error = false;
-	Variant value;
+	EditorInspector *inspector;
 
-	Vector<ClassDecl> classes;
+	ImportDefaultsEditorSettings *settings;
 
-	enum Token {
-		TK_BRACKET_OPEN,
-		TK_BRACKET_CLOSE,
-		TK_CURLY_BRACKET_OPEN,
-		TK_CURLY_BRACKET_CLOSE,
-		TK_PERIOD,
-		TK_COLON,
-		TK_COMMA,
-		TK_SYMBOL,
-		TK_IDENTIFIER,
-		TK_STRING,
-		TK_NUMBER,
-		TK_OP_LESS,
-		TK_OP_GREATER,
-		TK_EOF,
-		TK_ERROR,
-		TK_MAX
-	};
+	void _update_importer();
+	void _importer_selected(int p_index);
 
-	static const char *token_names[TK_MAX];
-	static String get_token_name(Token p_token);
+	void _reset();
+	void _save();
 
-	Token get_token();
-
-	Error _skip_generic_type_params();
-
-	Error _parse_type_full_name(String &r_full_name);
-	Error _parse_class_base(Vector<String> &r_base);
-	Error _parse_type_constraints();
-	Error _parse_namespace_name(String &r_name, int &r_curly_stack);
+protected:
+	void _notification(int p_what);
+	static void _bind_methods();
 
 public:
-	Error parse(const String &p_code);
-	Error parse_file(const String &p_filepath);
+	void clear();
 
-	String get_error();
-
-	Vector<ClassDecl> get_classes();
+	ImportDefaultsEditor();
+	~ImportDefaultsEditor();
 };
 
-#endif // SCRIPT_CLASS_PARSER_H
+#endif // IMPORT_DEFAULTS_EDITOR_H

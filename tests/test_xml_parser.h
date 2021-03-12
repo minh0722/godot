@@ -1,5 +1,5 @@
 /*************************************************************************/
-/*  navigation_2d.h                                                      */
+/*  test_xml_parser.h                                                    */
 /*************************************************************************/
 /*                       This file is part of:                           */
 /*                           GODOT ENGINE                                */
@@ -28,44 +28,47 @@
 /* SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.                */
 /*************************************************************************/
 
-#ifndef NAVIGATION_2D_H
-#define NAVIGATION_2D_H
+#ifndef TEST_XML_PARSER_H
+#define TEST_XML_PARSER_H
 
-#include "scene/2d/navigation_region_2d.h"
-#include "scene/2d/node_2d.h"
+#include <inttypes.h>
 
-class Navigation2D : public Node2D {
-	GDCLASS(Navigation2D, Node2D);
+#include "core/io/xml_parser.h"
+#include "core/string/ustring.h"
 
-	RID map;
-	real_t cell_size;
-	real_t edge_connection_margin;
+#include "tests/test_macros.h"
 
-protected:
-	static void _bind_methods();
-	void _notification(int p_what);
+namespace TestXMLParser {
+TEST_CASE("[XMLParser] End-to-end") {
+	String source = "<?xml version = \"1.0\" encoding=\"UTF-8\" ?>\
+<top attr=\"attr value\">\
+  Text&lt;&#65;&#x42;&gt;\
+</top>";
+	Vector<uint8_t> buff = source.to_utf8_buffer();
 
-public:
-	RID get_rid() const {
-		return map;
-	}
+	XMLParser parser;
+	parser.open_buffer(buff);
 
-	void set_cell_size(float p_cell_size);
-	float get_cell_size() const {
-		return cell_size;
-	}
+	// <?xml ...?> gets parsed as NODE_UNKNOWN
+	CHECK(parser.read() == OK);
+	CHECK(parser.get_node_type() == XMLParser::NodeType::NODE_UNKNOWN);
 
-	void set_edge_connection_margin(float p_edge_connection_margin);
-	float get_edge_connection_margin() const {
-		return edge_connection_margin;
-	}
+	CHECK(parser.read() == OK);
+	CHECK(parser.get_node_type() == XMLParser::NodeType::NODE_ELEMENT);
+	CHECK(parser.get_node_name() == "top");
+	CHECK(parser.has_attribute("attr"));
+	CHECK(parser.get_attribute_value("attr") == "attr value");
 
-	Vector<Vector2> get_simple_path(const Vector2 &p_start, const Vector2 &p_end, bool p_optimize = true) const;
-	Vector2 get_closest_point(const Vector2 &p_point) const;
-	RID get_closest_point_owner(const Vector2 &p_point) const;
+	CHECK(parser.read() == OK);
+	CHECK(parser.get_node_type() == XMLParser::NodeType::NODE_TEXT);
+	CHECK(parser.get_node_data().lstrip(" \t") == "Text<AB>");
 
-	Navigation2D();
-	~Navigation2D();
-};
+	CHECK(parser.read() == OK);
+	CHECK(parser.get_node_type() == XMLParser::NodeType::NODE_ELEMENT_END);
+	CHECK(parser.get_node_name() == "top");
 
-#endif // NAVIGATION_2D_H
+	parser.close();
+}
+} // namespace TestXMLParser
+
+#endif // TEST_XML_PARSER_H
